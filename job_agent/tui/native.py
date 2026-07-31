@@ -1639,6 +1639,35 @@ class NativeHarnessApp:
         output.append(f"{edge}╰{'─' * (inner_width + 2)}╯{RESET}")
         return output
 
+    def metric_strip(self, values: list[tuple[str, object]], width: int) -> list[str]:
+        """Compact dashboard counters with no background fill or fake progress bars."""
+        columns = max(1, min(len(values), max(1, width // 23)))
+        rows: list[str] = []
+        for offset in range(0, len(values), columns):
+            group = values[offset : offset + columns]
+            cell_width = max(14, (width - (len(group) - 1) * 3) // len(group))
+            rows.append("   ".join(
+                f"{CYAN}{BOLD}{str(value):<4}{RESET} {DIM}{label[:cell_width - 7]}{RESET}"
+                for label, value in group
+            ))
+        return rows
+
+    def workspace_composer(self, width: int) -> list[str]:
+        """A fixed visual anchor on data screens; full text input lives in Chat."""
+        state = "ARMED" if self.armed else "SAFE"
+        return self.panel(
+            "COMPOSER",
+            [
+                f"{CYAN}{BOLD}READY{RESET}  {DIM}{state} · orchestration is available from the start menu{RESET}",
+                f"{GRAY}> Open Agent Chat from Tab → Chat to ask for a scan, a draft, or a next step.{RESET}",
+            ],
+            2,
+            width,
+            CYAN,
+            active=False,
+            prewrapped=True,
+        )
+
     def render(self) -> None:
         # ED / CUP only redraw the primary viewport. No background colour or
         # alternate-buffer escape sequence is ever sent.
@@ -1663,15 +1692,17 @@ class NativeHarnessApp:
         if self.launcher_open:
             return self.render_launcher(width)
         mode = "ARM READY" if self.arm_pending else "ARMED" if self.armed else "SAFE"
-        signal = f"{self.flow_color()}◈ SIGNAL FLOW {self.spinner()} // {self.motion.upper()} MOTION{RESET}" if self.motion == "heavy" else f"{DIM}MOTION LIGHT{RESET}"
+        signal = f"{self.flow_color()}◈ {self.spinner()} active signal{RESET}" if self.motion == "heavy" else f"{DIM}quiet visual mode{RESET}"
         mode_color = YELLOW if self.armed or self.arm_pending else CYAN
         lines = [
-            f"{self.flow_color()}{BOLD}JOB HARNESS // OPERATOR STATION{RESET}  {signal}",
-            f"{mode_color}{mode}{RESET}  {DIM}Tab menu · ⇧Tab mode · / commands · Ctrl+Q exit{RESET}",
+            f"{PURPLE}{BOLD}JOB HARNESS // OPERATOR STATION{RESET}  {DIM}{self.view.upper().replace('_', ' ')}{RESET}  {signal}",
+            f"{mode_color}{mode}{RESET}  {DIM}local state · Tab menu · ⇧Tab mode · / commands · Ctrl+Q exit{RESET}",
             "",
         ]
         renderer = getattr(self, f"render_{self.view}")
         lines.extend(renderer(width))
+        if self.view in {"dashboard", "vacancies", "applications", "messages", "queue"}:
+            lines.extend(["", *self.workspace_composer(width)])
         lines.extend(["", f"{DIM}{self.notice}{RESET}"])
         if self.command_mode:
             lines.append(f"{PURPLE}{BOLD}COMMAND{RESET} > {self.command}{CYAN}█{RESET}")
@@ -1731,14 +1762,18 @@ class NativeHarnessApp:
     def render_dashboard(self, width: int) -> list[str]:
         stats = self.store().stats()
         usage = self.store().llm_usage_summary(datetime.now(UTC) - timedelta(hours=24))
-        lines = [f"{BOLD}TODAY'S CONSOLE{RESET}", ""] + [f"{name:<22} {CYAN}{value}{RESET}" for name, value in (("Found", stats["jobs"]), ("Analyzed", stats["analyzed"]), ("High match", stats["score_85"]), ("Drafts", stats["drafts"]), ("Submitted", stats["submitted"]), ("Needs clarification", stats["needs_clarification"]), ("Unread", stats["unread_messages"]))]
-        lines.extend(["", f"{BOLD}LLM USAGE · 24H{RESET}"])
+        lines = [f"{DIM}A single local view of discovery, analysis and confirmed delivery.{RESET}", ""]
+        lines.extend(self.metric_strip([
+            ("found", stats["jobs"]), ("analyzed", stats["analyzed"]), ("high match", stats["score_85"]),
+            ("drafts", stats["drafts"]), ("submitted", stats["submitted"]), ("clarifications", stats["needs_clarification"]),
+        ], width - 8))
+        lines.extend(["", f"{BOLD}LLM USAGE - 24H{RESET}"])
         if not usage:
             lines.append(f"{DIM}No recorded calls yet.{RESET}")
         for item in usage[:5]:
             tokens = str(item["tokens"]) if item["reported_calls"] else "not reported"
-            lines.append(f"{item['provider']}/{item['model']:<22} {item['action']:<24} {tokens} tokens · ${float(item['cost_usd']):.4f}")
-        return lines
+            lines.append(f"{item['provider']}/{item['model']:<22} {item['action']:<24} {tokens} tokens  ${float(item['cost_usd']):.4f}")
+        return self.panel("TODAY'S CONSOLE", lines, max(6, getattr(self, "_render_height", 32) - 13), width, active=self.view == "dashboard", prewrapped=True)
 
     def render_profile(self, width: int) -> list[str]:
         """A readable map of user-owned candidate memory, not a hidden prompt."""
@@ -1797,20 +1832,30 @@ class NativeHarnessApp:
         ]
 
     def render_vacancies(self, width: int) -> list[str]:
-        filters = f"site={self.job_site_filter or 'all'} · status={self.job_status_filter or 'all'} · min={self.job_min_score} · sort={self.job_sort}"
-        controls = f"{CYAN}[O]{RESET} sort:{self.job_sort}  {CYAN}[F]{RESET} min:{self.job_min_score}  {CYAN}[P]{RESET} site:{self.job_site_filter or 'all'}  {CYAN}[T]{RESET} status:{self.job_status_filter or 'all'}  {DIM}[X] clear{RESET}"
-        lines = [f"{BOLD}VACANCIES{RESET}", f"{DIM}{filters}{RESET}", controls, f"{DIM}↑/↓ select · Enter open · filters cycle immediately{RESET}", ""]
         rows = self.filtered_jobs()
+        filters = f"site: {self.job_site_filter or 'all'}  status: {self.job_status_filter or 'all'}  score: {self.job_min_score}+  sort: {self.job_sort}"
+        lines = [f"{DIM}{filters}{RESET}", f"{DIM}↑/↓ select  Enter inspect  O sort  F score  P site  T status  X clear{RESET}", ""]
+        lines.extend(self.metric_strip([
+            ("found", len(rows)),
+            ("high match", sum(1 for _, item in rows if item and item.score >= 85)),
+            ("drafts", sum(1 for job, _ in rows if job.status in {"draft_created", "ready_to_apply"})),
+            ("clarify", sum(1 for job, _ in rows if job.status == "needs_clarification")),
+        ], width - 8))
+        lines.extend(["", f"{DIM}{'SITE':<10}{'VACANCY':<{max(20, width - 66)}}{'SCORE':>7}  {'WORKFLOW':<18} NEXT STEP{RESET}"])
         visible, start, selected_index = self.visible_window(
-            rows, self.selected_job_id, lambda row: row[0].id, shutil.get_terminal_size((100, 32)).lines - 9
+            rows, self.selected_job_id, lambda row: row[0].id, max(3, getattr(self, "_render_height", 32) - 21)
         )
         if rows:
-            lines.append(f"{DIM}{selected_index + 1}/{len(rows)} · showing {start + 1}–{start + len(visible)}{RESET}")
+            lines.append(f"{DIM}{selected_index + 1}/{len(rows)}  showing {start + 1}-{start + len(visible)}{RESET}")
         for job, analysis in visible:
             score = analysis.score if analysis else 0
             selected = self.selection(job.id == self.selected_job_id)
-            lines.append(f"{selected}#{job.id:<3} {job.site:<7} {score:>3}  {self.status(job.status):<20} {job.discovered_at:%d.%m %H:%M} {job.title[:max(18, width - 60)]}")
-        return lines if rows else lines + [f"{DIM}No vacancies collected yet.{RESET}"]
+            title_width = max(20, width - 72)
+            next_step = "review draft" if job.status in {"draft_created", "ready_to_apply"} else "open vacancy"
+            lines.append(f"{selected}{job.site:<8} {self.clip_ansi(job.title, title_width):<{title_width}} {score:>5}  {self.status(job.status):<18} {next_step}")
+        if not rows:
+            lines.append(f"{DIM}No vacancies collected yet. Open Agent Chat to start a scan.{RESET}")
+        return self.panel("VACANCIES", lines, max(8, getattr(self, "_render_height", 32) - 13), width, active=self.view == "vacancies", prewrapped=True)
 
     def filtered_jobs(self):  # type: ignore[no-untyped-def]
         rows = self.store().list_jobs(min_score=self.job_min_score, site=self.job_site_filter, status=self.job_status_filter)
@@ -1848,16 +1893,26 @@ class NativeHarnessApp:
 
     def render_applications(self, width: int) -> list[str]:
         rows = self.store().list_applications()
-        lines = [f"{BOLD}APPLICATIONS{RESET}", f"{DIM}↑/↓ select · Enter open · each draft can be edited or submitted from its detail screen.{RESET}", ""]
+        lines = [f"{DIM}↑/↓ select  Enter inspect  Each draft remains local until a site confirms delivery.{RESET}", ""]
+        lines.extend(self.metric_strip([
+            ("total", len(rows)),
+            ("drafts", sum(item.status == "draft" for item in rows)),
+            ("submitted", sum(item.status == "submitted" for item in rows)),
+            ("interviews", sum(item.status == "interview" for item in rows)),
+        ], width - 8))
+        lines.extend(["", f"{DIM}{'ID':<6}{'SITE':<10}{'STATUS':<22}{'CREATED':<18} NEXT STEP{RESET}"])
         visible, start, selected_index = self.visible_window(
-            rows, self.selected_application_id, lambda row: row.id, shutil.get_terminal_size((100, 32)).lines - 8
+            rows, self.selected_application_id, lambda row: row.id, max(3, getattr(self, "_render_height", 32) - 21)
         )
         if rows:
-            lines.append(f"{DIM}{selected_index + 1}/{len(rows)} · showing {start + 1}–{start + len(visible)}{RESET}")
+            lines.append(f"{DIM}{selected_index + 1}/{len(rows)}  showing {start + 1}-{start + len(visible)}{RESET}")
         for item in visible:
             selected = self.selection(item.id == self.selected_application_id)
-            lines.append(f"{selected}#{item.id:<3} job #{item.job_id:<3} {item.site:<7} {self.status(item.status):<22} {item.created_at:%d.%m %H:%M}")
-        return lines if rows else lines + [f"{DIM}No drafts yet. In vacancies run: draft JOB_ID{RESET}"]
+            next_step = "inspect / edit" if item.status == "draft" else "check status"
+            lines.append(f"{selected}#{item.id:<4}{item.site:<10}{self.status(item.status):<22}{item.created_at:%d %b %H:%M}  {next_step}")
+        if not rows:
+            lines.append(f"{DIM}No drafts yet. Open a vacancy and create a truthful local draft.{RESET}")
+        return self.panel("APPLICATIONS", lines, max(8, getattr(self, "_render_height", 32) - 13), width, active=self.view == "applications", prewrapped=True)
 
     def render_application_detail(self, width: int) -> list[str]:
         if not self.selected_application_id:
@@ -1904,19 +1959,27 @@ class NativeHarnessApp:
     def render_messages(self, width: int) -> list[str]:
         rows = self.filtered_messages()
         unread = sum(item.is_unread for item in rows)
-        lines = [f"{BOLD}MESSAGES{RESET}  {DIM}{len(rows)} conversations · {unread} unread · filter={self.message_filter} · / messages filter all|action|drafts|clarifications|sent|errors{RESET}", ""]
+        lines = [f"{DIM}filter: {self.message_filter}  / messages filter all|action|drafts|clarifications|sent|errors{RESET}", ""]
+        lines.extend(self.metric_strip([
+            ("conversations", len(rows)), ("unread", unread),
+            ("draft ready", sum(self.message_state(item.id, item.is_unread)[0] == "DRAFT READY" for item in rows)),
+            ("clarify", sum(self.message_state(item.id, item.is_unread)[0] == "NEEDS CLARIFICATION" for item in rows)),
+        ], width - 8))
+        lines.extend(["", f"{DIM}{'SITE':<10}{'SENDER':<18}{'STATUS':<22} PREVIEW{RESET}"])
         visible, start, selected_index = self.visible_window(
-            rows, self.selected_message_id, lambda row: row.id, shutil.get_terminal_size((100, 32)).lines - 8
+            rows, self.selected_message_id, lambda row: row.id, max(3, getattr(self, "_render_height", 32) - 21)
         )
         if rows:
-            lines.append(f"{DIM}{selected_index + 1}/{len(rows)} · showing {start + 1}–{start + len(visible)}{RESET}")
+            lines.append(f"{DIM}{selected_index + 1}/{len(rows)}  showing {start + 1}-{start + len(visible)}{RESET}")
         for item in visible:
             selected = self.selection(item.id == self.selected_message_id)
-            state, next_step = self.message_state(item.id, item.is_unread)
+            state, _next_step = self.message_state(item.id, item.is_unread)
             beacon = f"{self.flow_color()}◈{RESET}" if item.is_unread and (self.motion == "light" or self.clock.frame % 2 == 0) else " "
             preview = re.sub(r"\s+", " ", item.body).strip()
-            lines.append(f"{selected}{beacon}#{item.id:<3} {item.site:<7} {self.status(state):<19} {item.sender[:16]:<16} {preview[:max(12, width - 52)]}")
-        return lines if rows else lines + [f"{DIM}No messages collected.{RESET}"]
+            lines.append(f"{selected}{beacon}{item.site:<8} {item.sender[:16]:<18}{self.status(state):<22} {preview[:max(12, width - 60)]}")
+        if not rows:
+            lines.append(f"{DIM}No messages collected. A scan reads only messages with a visible unread marker.{RESET}")
+        return self.panel("MESSAGES", lines, max(8, getattr(self, "_render_height", 32) - 13), width, active=self.view == "messages", prewrapped=True)
 
     def render_message_detail(self, width: int) -> list[str]:
         if not self.selected_message_id:

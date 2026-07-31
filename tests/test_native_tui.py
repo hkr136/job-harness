@@ -1,7 +1,7 @@
 import os
 from types import SimpleNamespace
 
-from job_agent.tui.native import MENU_VIEWS, AnimationClock, NativeHarnessApp, UiEvent
+from job_agent.tui.native import ANSI_RE, MENU_VIEWS, AnimationClock, NativeHarnessApp, UiEvent
 
 
 def test_animation_clock_has_distinct_light_and_heavy_cadence() -> None:
@@ -223,6 +223,16 @@ def test_vacancy_filters_and_sort_are_available_from_commands() -> None:
     app.execute_command("vacancies filter clear")
     assert app.job_site_filter is None
     assert app.job_min_score == 0
+
+
+def test_data_workspaces_use_the_framed_operator_layout() -> None:
+    app = NativeHarnessApp(writer=lambda _: None)
+
+    for view, title in (("dashboard", "TODAY'S CONSOLE"), ("vacancies", "VACANCIES"), ("applications", "APPLICATIONS"), ("messages", "MESSAGES")):
+        app.view = view
+        rendered = ANSI_RE.sub("", "\n".join(app.lines(120, 38)))
+        assert f"╭─ {title}" in rendered
+        assert "╭─ COMPOSER" in rendered
 
 
 def test_vacancy_and_message_details_expose_direct_actions(monkeypatch) -> None:
