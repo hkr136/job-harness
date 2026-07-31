@@ -1,0 +1,1 @@
+"""Habr Career adapter."""

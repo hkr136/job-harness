@@ -1,0 +1,1 @@
+"""GeekJob adapter."""

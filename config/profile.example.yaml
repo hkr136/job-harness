@@ -1,0 +1,24 @@
+# Copy this file to $JOB_HARNESS_HOME/profile.yaml and fill it with personal data.
+candidate:
+  name: ""
+  experience_years: null
+  compensation:
+    # User-owned expectations. Leave null when a question needs manual review.
+    monthly_min: null
+    monthly_target: null
+    currency: ""
+    notes: ""
+  target_roles: []
+  skill_levels:
+    core: {}
+    additional_experience: []
+    learning: []
+    not_claimed: []
+  experience: []
+  preferred_work: []
+  excluded: []
+  languages: {}
+  response_preferences:
+    style: concise
+    honesty: strict
+    never_claim_unowned_skills: true

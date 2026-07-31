@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "job-agent"
+version = "0.1.0"
+description = "Human-supervised local job search and application assistant"
+requires-python = ">=3.11"
+dependencies = [
+  "APScheduler>=3.10,<4",
+  "httpx>=0.27,<1",
+  "playwright>=1.48,<2",
+  "pydantic>=2.8,<3",
+  "pydantic-settings>=2.4,<3",
+  "PyYAML>=6,<7",
+  "rich>=13.7,<14",
+  "SQLAlchemy>=2.0,<3",
+  "typer>=0.12,<1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "pytest-asyncio>=0.24,<1", "ruff>=0.6,<1"]
+
+[project.scripts]
+job-agent = "job_agent.cli.main:app"
+
+[project.entry-points."job_agent.providers"]
+# External packages may register a provider factory here. Built-in provider types
+# are configured in the user-owned config.yaml.
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["F", "I"]
+
+[tool.setuptools.packages.find]
+include = ["job_agent*"]

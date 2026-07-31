@@ -1,0 +1,110 @@
+# Generic starter configuration. Put personal values in $JOB_HARNESS_HOME/config.yaml.
+app:
+  dry_run: true
+  timezone: UTC
+
+# Visual-only terminal preference. `heavy` enables the Y2K signal flow;
+# `light` keeps only state-driven feedback.
+tui:
+  motion: heavy
+  vacancy_sort: fresh
+
+limits:
+  applications_per_day: 15
+  messages_per_hour: 10
+  llm_budget_per_day_usd: 2.00
+  max_browser_retries: 3
+  # Hard upper bound for one remote scan/message/status task. Stale browser
+  # work is requeued after a scheduler restart instead of blocking the queue.
+  remote_task_timeout_seconds: 240
+
+applications:
+  # `unattended_submission` is retained only for old configs. Use auto_mode.
+  auto_mode: false
+  auto_match_threshold: 60
+  auto_review_threshold: 80
+  auto_max_rewrite_attempts: 2
+  auto_reply_messages: true
+
+matching:
+  thresholds:
+    show_job: 45
+    manual_review: 60
+    recommend_apply: 72
+    high_priority: 85
+  skill_weights: {}
+
+# Provider definitions and role selections are generic. API keys belong in
+# $JOB_HARNESS_HOME/.env, never in this file or in the repository.
+llm:
+  providers:
+    codex:
+      type: codex_cli
+      enabled: true
+      auth: codex_oauth
+      # Leave model blank to let the signed-in Codex CLI use its default.
+      model: null
+      command: codex
+    openai:
+      type: openai_compatible
+      enabled: false
+      auth: api_key
+      base_url: https://api.openai.com/v1
+      api_key_env: JOB_AGENT_OPENAI_API_KEY
+      model: null
+      fallback_model: null
+    openrouter:
+      type: openai_compatible
+      enabled: false
+      auth: api_key
+      base_url: https://openrouter.ai/api/v1
+      api_key_env: JOB_AGENT_OPENROUTER_API_KEY
+      model: null
+      fallback_model: null
+    ollama:
+      type: ollama
+      enabled: false
+      auth: none
+      base_url: http://127.0.0.1:11434
+      model: null
+    gateway:
+      # Optional user-owned OpenAI-compatible endpoint. Configure its model
+      # catalogue below when its /models route is unavailable.
+      type: openai_compatible
+      enabled: false
+      auth: none
+      base_url: http://127.0.0.1:8080/v1
+      model: null
+      models: []
+  roles:
+    normalization:
+      provider: codex
+      automated: false
+    analysis:
+      provider: codex
+      # A scheduled scan may use any enabled provider through the same role.
+      automated: false
+    writing:
+      provider: codex
+      automated: false
+    application_review:
+      provider: codex
+      automated: false
+    orchestration:
+      provider: codex
+      automated: false
+    recovery:
+      provider: codex
+      automated: false
+
+scheduler:
+  enabled: false
+  # Background polling only happens in this local time window. CLI `run-now`
+  # remains available outside it for deliberate manual checks.
+  working_hours:
+    weekdays: [0, 1, 2, 3, 4] # Monday through Friday
+    start_hour: 9
+    end_hour: 19
+  jobs: {}
+
+sites: {}
