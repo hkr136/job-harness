@@ -2,6 +2,15 @@
 
 Local, human-supervised CLI for finding, ranking and drafting responses to vacancies.
 
+## Preview
+
+![Job Harness vacancy workbench](assets/tui-vacancies.png)
+
+![Job Harness scan workflow](assets/demo.gif)
+
+The preview uses synthetic data only. Regenerate these assets after a visual TUI
+change with `python tools/generate_demo_assets.py`.
+
 ## Install
 
 ```bash

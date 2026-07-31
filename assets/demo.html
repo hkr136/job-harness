@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Job Harness TUI preview</title>
+    <style>
+      :root { color-scheme: dark; --ink:#d7d7e3; --muted:#88899c; --violet:#c78bff; --cyan:#36d6e7; --yellow:#ffd85a; --line:#8f59bf; }
+      * { box-sizing:border-box; } body { margin:0; min-height:100vh; display:grid; place-items:center; background:#12101b; font-family:Menlo, Monaco, monospace; }
+      .shell { width:1520px; height:855px; padding:28px; color:var(--ink); background:radial-gradient(circle at 74% 14%,#35254d 0,transparent 31%),linear-gradient(120deg,#171323,#090a11); border:1px solid #4d3a67; border-radius:18px; box-shadow:0 28px 100px #000a; }
+      .window { display:flex; gap:8px; height:18px; margin-bottom:22px; } .dot { width:12px; height:12px; border-radius:50%; background:#ff625d; } .dot:nth-child(2){background:#ffbd44}.dot:nth-child(3){background:#00c851}
+      .top { display:flex; justify-content:space-between; align-items:baseline; border-bottom:1px solid #443152; padding-bottom:18px; } .brand { color:var(--violet); font-weight:800; letter-spacing:.08em; } .mode { color:var(--cyan); } .mode span { color:var(--muted); }
+      .nav { display:flex; gap:17px; color:var(--muted); margin-top:16px; font-size:14px; } .nav b { color:var(--cyan); font-weight:500; } .nav .active { color:var(--violet); border-bottom:2px solid var(--violet); padding-bottom:8px; }
+      .content { height:617px; padding:26px 0; } .box { height:100%; border:1px solid var(--line); border-radius:8px; padding:22px; background:#11111baa; } .label { color:var(--violet); font-weight:800; letter-spacing:.08em; } .sub { color:var(--muted); margin-top:8px; font-size:14px; }
+      .stats { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin:22px 0; } .stat { border-left:2px solid #625173; padding:10px 12px; background:#17152288; } .stat strong { display:block; color:var(--cyan); font-size:22px; margin-bottom:4px; } .stat small { color:var(--muted); }
+      table { width:100%; border-collapse:collapse; font-size:14px; } th { text-align:left; color:var(--muted); font-weight:500; padding:12px 9px; border-bottom:1px solid #49365a; } td { padding:15px 9px; border-bottom:1px solid #2f2739; } tr.selected { background:#251a3599; outline:1px solid #704596; } .score { color:var(--cyan); } .status { color:var(--yellow); } .ok { color:#8fe6b4; }
+      .composer { border:1px solid var(--cyan); border-radius:8px; padding:14px 18px; } .composer .label { color:var(--cyan); } .input { color:var(--muted); margin-top:11px; } .cursor { display:inline-block; width:8px; height:20px; vertical-align:middle; background:var(--cyan); margin-left:5px; animation:blink 1.4s steps(1) infinite; }
+      .running, .done, .report { display:none; } body.frame-2 .idle, body.frame-3 .idle { display:none; } body.frame-2 .running { display:block; color:var(--yellow); } body.frame-3 .done, body.frame-2 .report, body.frame-3 .report { display:block; } body.frame-3 .running { display:none; } @keyframes blink {50%{opacity:0}}
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="window"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+      <header class="top"><div class="brand">JOB HARNESS // OPERATOR STATION</div><div class="mode">SAFE <span>· local state · codex/default</span></div></header>
+      <nav class="nav"><span>Dashboard</span><b class="active">Vacancies</b><span>Applications</span><span>Messages</span><span>Clarifications</span><span>Queue</span><span>Settings</span></nav>
+      <section class="content"><div class="box">
+        <div class="label">VACANCIES</div><div class="sub idle">Ready to scan enabled sites. Candidate data remains local.</div><div class="sub running">◌ Scanning Kwork · collecting 12/18 · analyzing with analysis model</div><div class="sub done">✓ Scan complete · site confirmations and diagnostics are recorded locally.</div>
+        <div class="stats"><div class="stat"><strong>18</strong><small>found today</small></div><div class="stat"><strong>15</strong><small>analyzed</small></div><div class="stat"><strong>4</strong><small>high match</small></div><div class="stat"><strong>3</strong><small>drafts ready</small></div><div class="stat"><strong>0</strong><small>needs clarification</small></div></div>
+        <table><thead><tr><th>Site</th><th>Vacancy</th><th>Score</th><th>Workflow</th><th>Next step</th></tr></thead><tbody>
+          <tr class="selected"><td>Kwork</td><td>Extend an existing AI assistant in Python</td><td class="score">85</td><td class="status">DRAFT READY</td><td>Review response</td></tr>
+          <tr><td>hh</td><td>Backend engineer — automation platform</td><td class="score">78</td><td class="ok">ANALYZED</td><td>Create draft</td></tr>
+          <tr><td>GeekJob</td><td>Python integration developer</td><td class="score">72</td><td class="ok">ANALYZED</td><td>Create draft</td></tr>
+          <tr><td>Habr Career</td><td>AI workflow developer</td><td class="score">66</td><td class="ok">ANALYZED</td><td>Review fit</td></tr>
+        </tbody></table>
+        <div class="report"><p class="label" style="margin-top:24px">SCAN REPORT</p><p class="sub">Kwork | 3 found | 3 analyzed | 1 draft ready | 0 submitted | 0 errors</p></div>
+      </div></section>
+      <footer class="composer"><div class="label">COMPOSER <span style="color:var(--muted);font-weight:400">· READY · SAFE</span></div><div class="input">Type a message to the agent<span class="cursor"></span></div></footer>
+    </main>
+  </body>
+</html>
