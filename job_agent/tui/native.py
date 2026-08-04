@@ -1238,10 +1238,13 @@ class NativeHarnessApp:
                 title=job.title,
                 description=job.normalized_text.removeprefix("[normalized]\n") or job.description,
             )
-            self.store().save_draft(job.id, job.site, build_draft(raw, analysis))
+            application = self.store().save_draft(job.id, job.site, build_draft(raw, analysis))
             if show_applications:
-                self.view = "applications"
-                self.notice = f"Draft for vacancy #{job_id} saved locally."
+                # End at the exact result, never at an unrelated list cursor.
+                self.selected_application_id = application.id
+                self.detail_origin = "vacancy_detail"
+                self.view = "application_detail"
+                self.notice = f"DRAFT OPENED — vacancy #{job_id}; local only, not sent. Edit with E or return with Esc."
             else:
                 self.notice = f"DRAFT REGENERATED LOCALLY for vacancy #{job_id} — NOT SENT. Review or edit it before submitting."
         except Exception as error:
@@ -1926,6 +1929,14 @@ class NativeHarnessApp:
             if item.status == "submitted"
             else f"{YELLOW}{BOLD}DELIVERY: NOT SENT — LOCAL DRAFT ONLY{RESET}"
         )
+        try:
+            job, _analysis = self.store().get_job(item.job_id)
+            clarification = (
+                f"{YELLOW}{BOLD}BLOCKED: NEEDS CLARIFICATION{RESET}  Resolve the vacancy questions before sending."
+                if job.status == "needs_clarification" else ""
+            )
+        except ValueError:
+            clarification = ""
         offer_details = (
             f"{CYAN}KWORK OFFER{RESET}  {item.offer_price or '—'} ₽ · {item.offer_duration or '—'} days · {item.offer_title or 'will be proposed on send'}"
             if item.site == "kwork"
@@ -1952,7 +1963,7 @@ class NativeHarnessApp:
                 *self.wrap(editor, width),
             ]
         return [
-            f"{BOLD}APPLICATION DETAIL{RESET}", "", f"Job #{item.job_id} · {item.site} · {item.status}", delivery, offer_details, regenerating, submitting, "",
+            f"{BOLD}APPLICATION DETAIL{RESET}", "", f"Job #{item.job_id} · {item.site} · {item.status}", delivery, clarification, offer_details, regenerating, submitting, "",
             *review_lines, "", f"{BOLD}TEXT{RESET}", *self.wrap(item.final_text or item.draft, width), "", actions,
         ]
 

@@ -255,6 +255,27 @@ def test_vacancy_and_message_details_expose_direct_actions(monkeypatch) -> None:
     assert calls == [("draft", 9), ("job", 9), ("reply", 4), ("send", 4), ("message", 4)]
 
 
+def test_creating_a_vacancy_draft_opens_that_exact_draft(monkeypatch) -> None:
+    app = NativeHarnessApp(writer=lambda _: None)
+    job = SimpleNamespace(
+        id=9, external_job_id="remote-job", site="sample", url="https://example.test/job",
+        title="Backend role", normalized_text="", description="Build an API",
+    )
+    application = SimpleNamespace(id=42)
+    store = SimpleNamespace(
+        get_job=lambda job_id: (job, SimpleNamespace()),
+        save_draft=lambda job_id, site, text: application,
+    )
+    monkeypatch.setattr(app, "store", lambda: store)
+    monkeypatch.setattr("job_agent.tui.native.build_draft", lambda raw, analysis: "Draft text")
+
+    app.create_draft(9)
+
+    assert app.view == "application_detail"
+    assert app.selected_application_id == 42
+    assert "DRAFT OPENED" in app.notice
+
+
 def test_prepare_reply_uses_a_local_only_message_service(monkeypatch) -> None:
     app = NativeHarnessApp(writer=lambda _: None)
     received: list[object] = []
@@ -326,6 +347,7 @@ def test_create_draft_builds_pydantic_job_with_named_fields(monkeypatch) -> None
 
         def save_draft(self, *args):  # type: ignore[no-untyped-def]
             saved.extend(args)
+            return SimpleNamespace(id=17)
 
     monkeypatch.setattr(app, "store", lambda: DraftStore())
     monkeypatch.setattr("job_agent.tui.native.build_draft", lambda raw, _analysis: raw.description)
@@ -333,4 +355,6 @@ def test_create_draft_builds_pydantic_job_with_named_fields(monkeypatch) -> None
     app.create_draft(7)
 
     assert saved == [7, "sample", "Normalized description"]
-    assert "Draft for vacancy #7 saved locally" in app.notice
+    assert app.view == "application_detail"
+    assert app.selected_application_id == 17
+    assert "DRAFT OPENED" in app.notice
