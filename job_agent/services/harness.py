@@ -11,6 +11,11 @@ from job_agent.models import SearchFilters
 from job_agent.services.auto_workflow import AutoWorkflowService
 from job_agent.services.message_service import MessageService
 from job_agent.services.orchestration import OrchestrationService
+from job_agent.services.recovery_service import (
+    adapter_test_target,
+    apply_verified_adapter_recovery,
+    is_recoverable_adapter_error,
+)
 from job_agent.services.search_service import SearchService
 from job_agent.services.status_service import StatusService
 from job_agent.sites.registry import build_adapter
@@ -40,18 +45,10 @@ class HarnessWorker:
             return None
         run = self.store.start_run(task.kind, task.site)
         try:
-            detail = await asyncio.wait_for(
-                self._execute_task(task.kind, task.site),
-                timeout=self.settings.limits.remote_task_timeout_seconds,
-            )
+            detail = await self._execute_with_recovery(task.kind, task.site)
             self.store.finish_task(task.id, detail)
             self.store.finish_run(run.id, "completed", detail)
             return detail
-        except asyncio.TimeoutError:
-            detail = f"{task.site or 'site'} {task.kind} timed out after {self.settings.limits.remote_task_timeout_seconds}s; retry {task.attempts}/{task.max_attempts}. Check ~/.job-harness/artifacts/playwright-traces."
-            self.store.retry_task(task.id, detail)
-            self.store.finish_run(run.id, "failed", detail)
-            return f"failed: {detail}"
         except Exception as error:
             self.store.retry_task(task.id, str(error))
             self.store.finish_run(run.id, "failed", str(error))
@@ -65,16 +62,59 @@ class HarnessWorker:
         """
         run = self.store.start_run(kind, site)
         try:
-            detail = await asyncio.wait_for(
-                self._execute_task(kind, site),
-                timeout=self.settings.limits.remote_task_timeout_seconds,
-            )
+            detail = await self._execute_with_recovery(kind, site)
             self.store.finish_run(run.id, "completed", detail)
             return detail
         except Exception as error:
-            detail = f"{site} {kind} timed out after {self.settings.limits.remote_task_timeout_seconds}s; check ~/.job-harness/artifacts/playwright-traces." if isinstance(error, asyncio.TimeoutError) else str(error)
+            detail = str(error)
             self.store.finish_run(run.id, "failed", detail)
             raise
+
+    def _failure_detail(self, kind: str, site: str, error: Exception) -> str:
+        if isinstance(error, asyncio.TimeoutError):
+            return (
+                f"{site} {kind} timed out after {self.settings.limits.remote_task_timeout_seconds}s "
+                f"during remote execution; check ~/.job-harness/artifacts/playwright-traces."
+            )
+        return f"{site} {kind} failed: {type(error).__name__}: {error}"
+
+    async def _attempt_recovery(self, kind: str, site: str, detail: str) -> tuple[bool, str]:
+        """Patch only a recoverable site adapter, then let the caller retry once."""
+        if not is_recoverable_adapter_error(detail) or not getattr(self.settings, "llm", None):
+            return False, ""
+        provider = provider_for_role(self.settings, "recovery")
+        if provider is None:
+            return False, " · recovery skipped: no recovery model configured"
+        config = self.settings.sites[site]
+        browser = BrowserManager(
+            self.settings.env.headless,
+            self.settings.env.browser_min_action_delay_seconds,
+            self.settings.env.browser_max_action_delay_seconds,
+        )
+        adapter = build_adapter(config.adapter, browser, config.browser_profile)
+        fixed, artifact, result = await apply_verified_adapter_recovery(
+            provider, adapter, site, f"{kind}: {detail}", test_target=adapter_test_target(site)
+        )
+        return fixed, f" · recovery {'activated' if fixed else 'not applied'}: {artifact} · {result}"
+
+    async def _execute_with_recovery(self, kind: str, site: str) -> str:
+        """Run one stage and retry it once only after a verified adapter repair."""
+        try:
+            return await asyncio.wait_for(
+                self._execute_task(kind, site), timeout=self.settings.limits.remote_task_timeout_seconds,
+            )
+        except Exception as error:
+            detail = self._failure_detail(kind, site, error)
+            fixed, recovery = await self._attempt_recovery(kind, site, detail)
+            if not fixed:
+                raise RuntimeError(detail + recovery) from error
+            try:
+                return await asyncio.wait_for(
+                    self._execute_task(kind, site), timeout=self.settings.limits.remote_task_timeout_seconds,
+                )
+            except Exception as retry_error:
+                retry_detail = self._failure_detail(kind, site, retry_error)
+                raise RuntimeError(detail + recovery + f" · retry failed: {retry_detail}") from retry_error
 
     async def _execute_task(self, kind: str, site: str | None) -> str:
         """Perform one remote operation under the caller's single task deadline."""

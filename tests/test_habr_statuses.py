@@ -12,6 +12,15 @@ def test_habr_response_status_mapping() -> None:
     assert HabrAdapter.response_status("Python Developer") == "submitted"
 
 
+def test_habr_conversation_reader_keeps_only_latest_inbound_threads() -> None:
+    rows = HabrAdapter.parse_conversation_rows([
+        {"conversation_id": "employer", "sender": "Employer", "preview": "Please share your availability"},
+        {"conversation_id": "answered", "sender": "Employer", "preview": "Вы: Thank you, I am interested."},
+        {"conversation_id": "empty", "sender": "Employer", "preview": ""},
+    ])
+    assert rows == [{"conversation_id": "employer", "sender": "Employer", "preview": "Please share your availability"}]
+
+
 def test_geekjob_response_status_mapping() -> None:
     assert GeekJobAdapter.response_status("Статус: отправлен запрос") == "submitted"
     assert GeekJobAdapter.response_status("Статус: прочитано") == "viewed"
@@ -56,6 +65,14 @@ async def test_hh_submission_rejects_blank_cover_letter_before_browser_access() 
 async def test_hh_message_send_requires_explicit_confirmation_before_browser_access() -> None:
     adapter = HHAdapter(None)
     result = await adapter.send_message("42", "Здравствуйте!", confirm=False)
+    assert not result.confirmed
+    assert "Explicit confirmation" in result.detail
+
+
+@pytest.mark.asyncio
+async def test_habr_message_send_requires_explicit_confirmation_before_browser_access() -> None:
+    adapter = HabrAdapter(None)
+    result = await adapter.send_message("employer", "Hello", confirm=False)
     assert not result.confirmed
     assert "Explicit confirmation" in result.detail
 

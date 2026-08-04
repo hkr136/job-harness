@@ -24,6 +24,7 @@ def is_recoverable_adapter_error(detail: str) -> bool:
 def adapter_test_target(site: str) -> str:
     return {
         "kwork": "tests/test_kwork_offer.py",
+        "habr": "tests/test_habr_statuses.py",
     }.get(site, "tests")
 
 
