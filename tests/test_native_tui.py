@@ -285,7 +285,7 @@ def test_prepare_reply_uses_a_local_only_message_service(monkeypatch) -> None:
             received.extend((store, adapter))
 
         def prepare_reply(self, message_id, profile):  # type: ignore[no-untyped-def]
-            return type("Reply", (), {"status": "draft"})()
+            return type("Reply", (), {"status": "draft", "reason": ""})()
 
     monkeypatch.setattr(app, "store", lambda: "store")
     monkeypatch.setattr("job_agent.tui.native.MessageService", LocalReplyService)
@@ -294,7 +294,27 @@ def test_prepare_reply_uses_a_local_only_message_service(monkeypatch) -> None:
     app.prepare_reply(7)
 
     assert received == ["store", None]
-    assert "DRAFT READY — NOT SENT" in app.notice
+    assert app.view == "message_detail"
+    assert app.selected_message_id == 7
+    assert "REPLY DRAFT OPENED" in app.notice
+
+
+def test_clarifications_screen_includes_message_questions(monkeypatch) -> None:
+    app = NativeHarnessApp(writer=lambda _: None)
+    message = SimpleNamespace(id=8, site="hh", sender="Employer", body="Can you start next month?")
+    reply = SimpleNamespace(status="needs_clarification", reason="Start date is not in the profile.")
+    store = SimpleNamespace(
+        list_clarifications=lambda: [],
+        list_messages=lambda: [message],
+        get_message_reply=lambda message_id: reply,
+    )
+    monkeypatch.setattr(app, "store", lambda: store)
+
+    rendered = ANSI_RE.sub("", "\n".join(app.render_clarifications(100)))
+
+    assert "MESSAGE QUESTIONS" in rendered
+    assert "message #8" in rendered
+    assert "Start date is not in the profile." in rendered
 
 
 def test_armed_send_enters_a_visible_non_blocking_sending_state(monkeypatch) -> None:

@@ -1560,7 +1560,13 @@ class NativeHarnessApp:
         try:
             # Preparing a draft is local-only, so no site adapter is needed.
             reply = MessageService(self.store(), None).prepare_reply(message_id, load_profile())
-            self.notice = f"DRAFT READY — NOT SENT ({reply.status}). Press S only in ARMED to attempt delivery."
+            self.selected_message_id = message_id
+            self.detail_origin = "messages"
+            self.view = "message_detail"
+            if reply.status == "draft":
+                self.notice = "REPLY DRAFT OPENED — local only, not sent. Review the text below; press S only in ARMED."
+            else:
+                self.notice = f"CLARIFICATION REQUIRED — no reply draft was created: {reply.reason}"
         except Exception as error:
             self.record_ui_error(f"create reply draft #{message_id}", error)
             self.notice = f"Reply draft was not created: {type(error).__name__}: {error}"
@@ -2062,9 +2068,24 @@ class NativeHarnessApp:
 
     def render_clarifications(self, width: int) -> list[str]:
         rows = self.store().list_clarifications()
-        lines = [f"{BOLD}NEEDS CLARIFICATION{RESET}", f"{DIM}/ clarify REQUEST_ID profile|vacancy ANSWER · resolve JOB_ID{RESET}", ""]
+        message_rows = []
+        for message in self.store().list_messages():
+            try:
+                reply = self.store().get_message_reply(message.id)
+            except ValueError:
+                continue
+            if reply.status == "needs_clarification":
+                message_rows.append((message, reply))
+        lines = [f"{BOLD}NEEDS CLARIFICATION{RESET}", f"{DIM}Vacancy: / clarify REQUEST_ID profile|vacancy ANSWER · resolve JOB_ID{RESET}", ""]
         lines.extend(f"#{item.id:<3} job #{item.job_id:<3} {item.site:<7} {item.kind:<14} {item.state:<9} {item.question[:max(20, width - 48)]}" for item in rows)
-        return lines if rows else lines + [f"{CYAN}No open clarification requests.{RESET}"]
+        if message_rows:
+            lines.extend(["", f"{BOLD}MESSAGE QUESTIONS{RESET}"])
+            for message, reply in message_rows:
+                reason = reply.reason or "candidate fact required"
+                lines.append(f"message #{message.id:<3} {message.site:<7} {message.sender[:16]:<16} {reason[:max(20, width - 44)]}")
+                lines.extend(self.wrap(f"Question: {message.body}", width))
+                lines.append(f"{DIM}Next: open Messages, select #{message.id}, update the needed profile fact, then create a new draft.{RESET}")
+        return lines if rows or message_rows else lines + [f"{CYAN}No open clarification requests.{RESET}"]
 
     def render_queue(self, width: int) -> list[str]:
         rows = self.store().list_tasks()
